@@ -1,0 +1,17 @@
+name: Rust
+
+on:
+  push:
+
+jobs:
+  check-fmt:
+    name: Check cargo fmt
+    runs-on: ubuntu-latest
+    container:
+      image: amd64/rust
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Run check
+        run: |
+          cargo fmt --all -- --check

@@ -1,8 +1,8 @@
-use std::collections::HashMap;
-use serde::Deserialize;
-use regex::Regex;
-use itertools::Itertools;
 use crate::reader::{ZarrError, ZarrResult};
+use itertools::Itertools;
+use regex::Regex;
+use serde::Deserialize;
+use std::collections::HashMap;
 
 // Various enums for the properties of the zarr arrays data.
 #[derive(Debug, PartialEq, Clone)]
@@ -42,7 +42,6 @@ enum Filter {
     _FixedScaleOffser,
 }
 
-
 /// The metadata for a single zarr array, which holds various parameters
 /// for the data stored in the array.
 #[derive(Debug, PartialEq, Clone)]
@@ -58,12 +57,19 @@ pub struct ZarrArrayMetadata {
 impl ZarrArrayMetadata {
     pub(crate) fn new(
         zarr_format: u8,
-        data_type: ZarrDataType, 
+        data_type: ZarrDataType,
         compressor: Option<CompressorType>,
         order: MatrixOrder,
         endianness: Endianness,
     ) -> Self {
-        Self { zarr_format, data_type, compressor, order, endianness, _filter: None }
+        Self {
+            zarr_format,
+            data_type,
+            compressor,
+            order,
+            endianness,
+            _filter: None,
+        }
     }
 
     pub(crate) fn get_type(&self) -> &ZarrDataType {
@@ -94,20 +100,18 @@ pub struct ZarrStoreMetadata {
     chunks: Option<Vec<usize>>,
     shape: Option<Vec<usize>>,
     last_chunk_idx: Option<Vec<usize>>,
-    array_params: HashMap<String, ZarrArrayMetadata>
+    array_params: HashMap<String, ZarrArrayMetadata>,
 }
-
 
 #[derive(Deserialize)]
 struct RawCompParams {
-    id: String
+    id: String,
 }
 
 #[derive(Deserialize)]
 struct RawOuterCompParams {
-    compressor: RawCompParams
+    compressor: RawCompParams,
 }
-
 
 #[derive(Deserialize)]
 struct RawArrayParams {
@@ -117,7 +121,6 @@ struct RawArrayParams {
     dtype: String,
     order: String,
 }
-
 
 // This is the byte length of the Py Unicode characters that zarr writes
 // when the output type is set to U<length>.
@@ -137,43 +140,62 @@ fn extract_type(dtype: &str) -> ZarrResult<ZarrDataType> {
 
     if str_re.is_match(dtype) {
         let str_len = dtype[2..dtype.len()].parse::<usize>().unwrap();
-        return Ok(ZarrDataType::FixedLengthString(str_len))
+        return Ok(ZarrDataType::FixedLengthString(str_len));
     }
 
     if uni_re.is_match(dtype) {
         let str_len = dtype[2..dtype.len()].parse::<usize>().unwrap();
-        return Ok(ZarrDataType::FixedLengthPyUnicode(PY_UNICODE_SIZE * str_len))
+        return Ok(ZarrDataType::FixedLengthPyUnicode(
+            PY_UNICODE_SIZE * str_len,
+        ));
     }
 
     if let Some(capt) = ts_re.captures(&dtype) {
         return Ok(ZarrDataType::TimeStamp(
             8,
-            capt.get(3).unwrap().as_str().strip_prefix("[").unwrap().strip_suffix("]").unwrap().to_string(),
-        ))
+            capt.get(3)
+                .unwrap()
+                .as_str()
+                .strip_prefix("[")
+                .unwrap()
+                .strip_suffix("]")
+                .unwrap()
+                .to_string(),
+        ));
     }
 
     // all other types should have a length of 3
     if dtype.len() != 3 {
-        return Err(ZarrError::InvalidMetadata("could not match type in zarr metadata".to_string()))
+        return Err(ZarrError::InvalidMetadata(
+            "could not match type in zarr metadata".to_string(),
+        ));
     }
 
     if let Some(_capt) = bool_re.captures(&dtype) {
-        return Ok(ZarrDataType::Bool)
+        return Ok(ZarrDataType::Bool);
     }
 
     if let Some(capt) = uint_re.captures(&dtype) {
-        return Ok(ZarrDataType::UInt(capt.get(3).unwrap().as_str().parse::<usize>().unwrap()))
+        return Ok(ZarrDataType::UInt(
+            capt.get(3).unwrap().as_str().parse::<usize>().unwrap(),
+        ));
     }
 
     if let Some(capt) = int_re.captures(&dtype) {
-        return Ok(ZarrDataType::Int(capt.get(3).unwrap().as_str().parse::<usize>().unwrap()))
+        return Ok(ZarrDataType::Int(
+            capt.get(3).unwrap().as_str().parse::<usize>().unwrap(),
+        ));
     }
 
     if let Some(capt) = float_re.captures(&dtype) {
-        return Ok(ZarrDataType::Float(capt.get(3).unwrap().as_str().parse::<usize>().unwrap()))
+        return Ok(ZarrDataType::Float(
+            capt.get(3).unwrap().as_str().parse::<usize>().unwrap(),
+        ));
     }
 
-    Err(ZarrError::InvalidMetadata("could not match type in zarr metadata".to_string()))
+    Err(ZarrError::InvalidMetadata(
+        "could not match type in zarr metadata".to_string(),
+    ))
 }
 
 impl ZarrStoreMetadata {
@@ -191,84 +213,79 @@ impl ZarrStoreMetadata {
     // adds the metadata for one column (variable) to the store metadata.
     pub(crate) fn add_column(&mut self, col_name: String, metadata_str: &str) -> ZarrResult<()> {
         // extract compressor type
-        let j: Result<RawOuterCompParams, serde_json::Error> =
-            serde_json::from_str(&metadata_str);
+        let j: Result<RawOuterCompParams, serde_json::Error> = serde_json::from_str(&metadata_str);
         let compressor = if let Ok(comp) = j {
             match comp.compressor.id.as_str() {
                 "blosc" => Some(CompressorType::Blosc),
                 "zlib" => Some(CompressorType::Zlib),
                 "lzma" => Some(CompressorType::Lzma),
                 "bz2" => Some(CompressorType::Bz2),
-                _ => return Err(
-                    ZarrError::InvalidMetadata(
-                        "Invalid compressor params in zarr metadata".to_string()
-                    )
-                )
+                _ => {
+                    return Err(ZarrError::InvalidMetadata(
+                        "Invalid compressor params in zarr metadata".to_string(),
+                    ))
+                }
             }
         } else {
             let j: serde_json::Value = serde_json::from_str(&metadata_str).unwrap();
             if j["compressor"].is_null() {
                 None
             } else {
-                return Err(
-                    ZarrError::InvalidMetadata(
-                        "Invalid compressor params in zarr metadata".to_string()
-                    )
-                )
+                return Err(ZarrError::InvalidMetadata(
+                    "Invalid compressor params in zarr metadata".to_string(),
+                ));
             }
         };
 
-        let j: Result<RawArrayParams, serde_json::Error> =
-            serde_json::from_str(&metadata_str);
+        let j: Result<RawArrayParams, serde_json::Error> = serde_json::from_str(&metadata_str);
         if let Ok(raw_params) = j {
             // verify that all arrays have the same chunks
             if let Some(chnks) = &self.chunks {
                 if chnks != &raw_params.chunks {
-                    return Err(
-                        ZarrError::InvalidMetadata(
-                            "All arrays in the zarr store must have the same chunks".to_string()
-                        )
-                    )
+                    return Err(ZarrError::InvalidMetadata(
+                        "All arrays in the zarr store must have the same chunks".to_string(),
+                    ));
                 }
             }
             if raw_params.chunks.len() > 3 {
-                return Err(ZarrError::InvalidMetadata("Chunk dimensionality must not exceed 3".to_string()))
+                return Err(ZarrError::InvalidMetadata(
+                    "Chunk dimensionality must not exceed 3".to_string(),
+                ));
             }
 
             // verify that all arrays have the same shape
             if let Some(shp) = &self.shape {
                 if shp != &raw_params.shape {
-                    return Err(
-                        ZarrError::InvalidMetadata(
-                            "All arrays in the zarr store must have the same shape".to_string()
-                        )
-                    )
+                    return Err(ZarrError::InvalidMetadata(
+                        "All arrays in the zarr store must have the same shape".to_string(),
+                    ));
                 }
             }
             if raw_params.shape.len() > 3 {
-                return Err(ZarrError::InvalidMetadata("Shape dimensionality must not exceed 3".to_string()))
+                return Err(ZarrError::InvalidMetadata(
+                    "Shape dimensionality must not exceed 3".to_string(),
+                ));
             }
-
 
             // extract matrix order, endianness and data type
             let order = match raw_params.order.as_str() {
                 "C" => MatrixOrder::RowMajor,
                 "F" => MatrixOrder::ColumnMajor,
-                _ => return Err(
-                    ZarrError::InvalidMetadata(
-                        "Invalid matrix order in zarr metadata".to_string()
-                    )
-                )
+                _ => {
+                    return Err(ZarrError::InvalidMetadata(
+                        "Invalid matrix order in zarr metadata".to_string(),
+                    ))
+                }
             };
 
             let endianness = match raw_params.dtype.chars().next().unwrap() {
                 '<' | '|' => Endianness::Little,
                 '>' => Endianness::Big,
-                _ => return Err(
-                    ZarrError::InvalidMetadata(
-                        "Cannot extract endiannes from dtype in zarr metadata".to_string()
-                    )
-                ),
+                _ => {
+                    return Err(ZarrError::InvalidMetadata(
+                        "Cannot extract endiannes from dtype in zarr metadata".to_string(),
+                    ))
+                }
             };
 
             let data_type = extract_type(&raw_params.dtype)?;
@@ -276,11 +293,14 @@ impl ZarrStoreMetadata {
             // if everything is valid, update chunks and shape (if not set yet) and create
             // the params for the zarr array.
             if self.last_chunk_idx.is_none() {
-                self.last_chunk_idx = Some(raw_params.chunks
-                    .iter()
-                    .zip(&raw_params.shape)
-                    .map(|(&chnk, &shp)| (shp as f64 / chnk as f64).ceil() as usize- 1)
-                    .collect());
+                self.last_chunk_idx = Some(
+                    raw_params
+                        .chunks
+                        .iter()
+                        .zip(&raw_params.shape)
+                        .map(|(&chnk, &shp)| (shp as f64 / chnk as f64).ceil() as usize - 1)
+                        .collect(),
+                );
             }
             if self.chunks.is_none() {
                 self.chunks = Some(raw_params.chunks);
@@ -291,20 +311,21 @@ impl ZarrStoreMetadata {
 
             self.columns.push(col_name.to_string());
             self.array_params.insert(
-                col_name, 
-                ZarrArrayMetadata::new ( 
+                col_name,
+                ZarrArrayMetadata::new(
                     raw_params.zarr_format,
                     data_type,
                     compressor,
                     order,
                     endianness,
-                )
+                ),
             );
 
             Ok(())
-        }
-        else {
-            Err(ZarrError::InvalidMetadata("Cannot match zarr metadata".to_string()))
+        } else {
+            Err(ZarrError::InvalidMetadata(
+                "Cannot match zarr metadata".to_string(),
+            ))
         }
     }
 
@@ -317,11 +338,12 @@ impl ZarrStoreMetadata {
     }
 
     pub(crate) fn get_array_meta(&self, column: &str) -> ZarrResult<&ZarrArrayMetadata> {
-        Ok(
-            self.array_params
+        self.array_params
             .get(column)
-            .ok_or(ZarrError::InvalidMetadata(format!("Cannot find variable {} in metadata", column)))?
-        )
+            .ok_or(ZarrError::InvalidMetadata(format!(
+                "Cannot find variable {} in metadata",
+                column
+            )))
     }
 
     pub(crate) fn get_chunk_dims(&self) -> &Vec<usize> {
@@ -339,30 +361,26 @@ impl ZarrStoreMetadata {
             .map(|(&shp, &chnk)| (shp as f64 / chnk as f64).ceil() as usize)
             .collect();
 
-        let grid_positions = match n_chunks.len() {
-            1 => {(0..n_chunks[0]).map(|x| vec![x; 1]).collect()}
-            2 => {
-                (0..n_chunks[0])
-                    .cartesian_product(0..n_chunks[1])
-                    .map(|(a, b)| vec![a, b])
-                    .collect()
-            } 
-            3 => {
-                (0..n_chunks[0])
-                    .cartesian_product(0..n_chunks[1])
-                    .cartesian_product(0..n_chunks[2])
-                    .map(|((a, b), c)| vec![a, b, c])
-                    .collect()
+        match n_chunks.len() {
+            1 => (0..n_chunks[0]).map(|x| vec![x; 1]).collect(),
+            2 => (0..n_chunks[0])
+                .cartesian_product(0..n_chunks[1])
+                .map(|(a, b)| vec![a, b])
+                .collect(),
+            3 => (0..n_chunks[0])
+                .cartesian_product(0..n_chunks[1])
+                .cartesian_product(0..n_chunks[2])
+                .map(|((a, b), c)| vec![a, b, c])
+                .collect(),
+            _ => {
+                panic!("Array has more than 3 domensions, 3 is the limit")
             }
-            _ => {panic!("Array has more than 3 domensions, 3 is the limit")}
-        };
-
-        grid_positions
+        }
     }
 
     // return the real dimensions of a chhunk, given its position, taking into
     // account that it can be at the "edge" of the array for one or more dimension.
-    pub(crate) fn get_real_dims(&self, pos: &Vec<usize>) -> Vec<usize> {
+    pub(crate) fn get_real_dims(&self, pos: &[usize]) -> Vec<usize> {
         pos.iter()
             .zip(self.last_chunk_idx.as_ref().unwrap())
             .zip(self.chunks.as_ref().unwrap())
@@ -374,12 +392,11 @@ impl ZarrStoreMetadata {
                     } else {
                         *chnk
                     }
-                }
+                },
             )
             .collect()
     }
 }
-
 
 #[cfg(test)]
 mod zarr_metadata_tests {
@@ -399,7 +416,7 @@ mod zarr_metadata_tests {
             "order": "C",
             "compressor": {"id": "zlib"}
         }"#;
-        meta.add_column("var1".to_string(), &metadata_str).unwrap();
+        meta.add_column("var1".to_string(), metadata_str).unwrap();
 
         let metadata_str = r#"
         {
@@ -410,7 +427,7 @@ mod zarr_metadata_tests {
             "order": "C",
             "compressor": {"id": "blosc"}
         }"#;
-        meta.add_column("var2".to_string(), &metadata_str).unwrap();
+        meta.add_column("var2".to_string(), metadata_str).unwrap();
 
         let metadata_str = r#"
         {
@@ -421,7 +438,7 @@ mod zarr_metadata_tests {
             "order": "F",
             "compressor": null
         }"#;
-        meta.add_column("var3".to_string(), &metadata_str).unwrap();
+        meta.add_column("var3".to_string(), metadata_str).unwrap();
 
         let metadata_str = r#"
         {
@@ -432,7 +449,7 @@ mod zarr_metadata_tests {
             "order": "C",
             "compressor": {"id": "lzma"}
         }"#;
-        meta.add_column("var4".to_string(), &metadata_str).unwrap();
+        meta.add_column("var4".to_string(), metadata_str).unwrap();
 
         assert_eq!(meta.chunks, Some(vec![10, 10]));
         assert_eq!(meta.shape, Some(vec![100, 100]));
@@ -441,7 +458,7 @@ mod zarr_metadata_tests {
         assert_eq!(
             meta.array_params["var1"],
             ZarrArrayMetadata {
-                zarr_format : 2,
+                zarr_format: 2,
                 data_type: ZarrDataType::Int(4),
                 compressor: Some(CompressorType::Zlib),
                 order: MatrixOrder::RowMajor,
@@ -452,7 +469,7 @@ mod zarr_metadata_tests {
         assert_eq!(
             meta.array_params["var2"],
             ZarrArrayMetadata {
-                zarr_format : 2,
+                zarr_format: 2,
                 data_type: ZarrDataType::TimeStamp(8, "ms".to_string()),
                 compressor: Some(CompressorType::Blosc),
                 order: MatrixOrder::RowMajor,
@@ -463,7 +480,7 @@ mod zarr_metadata_tests {
         assert_eq!(
             meta.array_params["var3"],
             ZarrArrayMetadata {
-                zarr_format : 2,
+                zarr_format: 2,
                 data_type: ZarrDataType::Bool,
                 compressor: None,
                 order: MatrixOrder::ColumnMajor,
@@ -474,7 +491,7 @@ mod zarr_metadata_tests {
         assert_eq!(
             meta.array_params["var4"],
             ZarrArrayMetadata {
-                zarr_format : 2,
+                zarr_format: 2,
                 data_type: ZarrDataType::FixedLengthString(112),
                 compressor: Some(CompressorType::Lzma),
                 order: MatrixOrder::RowMajor,
@@ -495,9 +512,8 @@ mod zarr_metadata_tests {
             "order": "C",
             "compressor": {"id": "blosc"}
         }"#;
-        meta.add_column("var".to_string(), &metadata_str).unwrap();
+        meta.add_column("var".to_string(), metadata_str).unwrap();
         assert_eq!(meta.last_chunk_idx, Some(vec![8, 8]))
-
     }
 
     // test various metadata strings that are invalid and should results in an
@@ -516,7 +532,7 @@ mod zarr_metadata_tests {
             "order": "C",
             "compressor": {"id": "zlib"}
         }"#;
-        assert!(meta.add_column("var".to_string(), &metadata_str).is_err());
+        assert!(meta.add_column("var".to_string(), metadata_str).is_err());
 
         // invalid compressor
         let metadata_str = r#"
@@ -541,7 +557,7 @@ mod zarr_metadata_tests {
             "order": "C",
             "compressor": {"id": "blosc"}
         }"#;
-        meta.add_column("var1".to_string(), &metadata_str).unwrap();
+        meta.add_column("var1".to_string(), metadata_str).unwrap();
 
         let metadata_str = r#"
         {
@@ -552,7 +568,7 @@ mod zarr_metadata_tests {
             "order": "C",
             "compressor": {"id": "blosc"}
         }"#;
-        assert!(meta.add_column("var2".to_string(), &metadata_str).is_err());
+        assert!(meta.add_column("var2".to_string(), metadata_str).is_err());
 
         // mismatch between shapes
         let metadata_str = r#"
@@ -564,8 +580,6 @@ mod zarr_metadata_tests {
             "order": "C",
             "compressor": {"id": "blosc"}
         }"#;
-        assert!(meta.add_column("var2".to_string(), &metadata_str).is_err());
-
-
+        assert!(meta.add_column("var2".to_string(), metadata_str).is_err());
     }
 }
